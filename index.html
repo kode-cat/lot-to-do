@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do List</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: calc(100vh - 40px);
+        }
+
+        .todo-container {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .input-section {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        #task-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            outline: none;
+            font-weight: bold;
+        }
+
+        #add-btn {
+            background-color: #007BFF;
+            color: #fff;
+            border: none;
+            padding: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #add-btn:hover {
+            background-color: #0056b3;
+        }
+
+        #task-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .task {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .task.completed {
+            text-decoration: line-through;
+            color: #777;
+        }
+
+        .delete-btn {
+            background-color: #dc3545;
+            color: #fff;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .delete-btn:hover {
+            background-color: #b02a37;
+        }
+    </style>
+</head>
+<body>
+    <div class="todo-container">
+        <h1>To-Do List</h1>
+        <div class="input-section">
+            <input type="text" id="task-input" placeholder="Add a new task...">
+            <button id="add-btn">Add Task</button>
+        </div>
+        <ul id="task-list"></ul>
+    </div>
+    <script>
+        const addBtn = document.getElementById('add-btn');
+        const taskInput = document.getElementById('task-input');
+        const taskList = document.getElementById('task-list');
+
+        // Check if IndexedDB is supported
+        if (indexedDB) {
+            const dbName = 'todoAppDB';
+            const storeName = 'tasks';
+            let db = null;
+
+            const request = indexedDB.open(dbName, 1);
+
+            request.onupgradeneeded = function(event) {
+                db = event.target.result;
+                if (!db.objectStoreNames.contains(storeName)) {
+                    db.createObjectStore(storeName, { keyPath: 'text' });
+                }
+            };
+
+            request.onsuccess = function(event) {
+                db = event.target.result;
+                loadTasksFromIndexedDB();
+            };
+
+            request.onerror = function(event) {
+                console.error('Error opening IndexedDB:', event.target.error);
+            };
+
+            // Load tasks from IndexedDB
+            function loadTasksFromIndexedDB() {
+                const transaction = db.transaction(storeName, 'readonly');
+                const objectStore = transaction.objectStore(storeName);
+                const request = objectStore.getAll();
+
+                request.onsuccess = function(event) {
+                    const tasks = event.target.result;
+                    tasks.forEach(task => createTaskElement(task.text, task.completed));
+                };
+
+                request.onerror = function(event) {
+                    console.error('Error loading tasks from IndexedDB:', event.target.error);
+                };
+            }
+
+            // Save task to IndexedDB
+            function saveTask(text, completed) {
+                const transaction = db.transaction(storeName, 'readwrite');
+                const objectStore = transaction.objectStore(storeName);
+                objectStore.add({ text, completed });
+
+                transaction.oncomplete = function() {
+                    console.log('Task added to IndexedDB');
+                };
+
+                transaction.onerror = function(event) {
+                    console.error('Error saving task to IndexedDB:', event.target.error);
+                };
+            }
+
+            // Update task completion status in IndexedDB
+            function updateTaskStatus(text, completed) {
+                const transaction = db.transaction(storeName, 'readwrite');
+                const objectStore = transaction.objectStore(storeName);
+                const request = objectStore.get(text);
+
+                request.onsuccess = function(event) {
+                    const task = event.target.result;
+                    if (task) {
+                        task.completed = completed;
+                        objectStore.put(task);
+                    }
+                };
+
+                request.onerror = function(event) {
+                    console.error('Error updating task in IndexedDB:', event.target.error);
+                };
+            }
+
+            // Delete task from IndexedDB
+            function deleteTask(text) {
+                const transaction = db.transaction(storeName, 'readwrite');
+                const objectStore = transaction.objectStore(storeName);
+                objectStore.delete(text);
+
+                transaction.oncomplete = function() {
+                    console.log('Task deleted from IndexedDB');
+                };
+
+                transaction.onerror = function(event) {
+                    console.error('Error deleting task from IndexedDB:', event.target.error);
+                };
+            }
+        } else {
+            console.log('IndexedDB not supported, using localStorage');
+            loadTasksFromLocalStorage();
+
+            // Load tasks from localStorage
+            function loadTasksFromLocalStorage() {
+                const savedTasks = JSON.parse(localStorage.getItem('tasks')) || [];
+                savedTasks.forEach((task) => {
+                    createTaskElement(task.text, task.completed);
+                });
+            }
+
+            // Save task to localStorage
+            function saveTask(text, completed) {
+                const tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+                tasks.push({ text, completed });
+                localStorage.setItem('tasks', JSON.stringify(tasks));
+            }
+
+            // Update task completion status in localStorage
+            function updateTaskStatus(text, completed) {
+                const tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+                const task = tasks.find((task) => task.text === text);
+                if (task) {
+                    task.completed = completed;
+                    localStorage.setItem('tasks', JSON.stringify(tasks));
+                }
+            }
+
+            // Delete task from localStorage
+            function deleteTask(text) {
+                const tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+                const updatedTasks = tasks.filter((task) => task.text !== text);
+                localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+            }
+        }
+
+        // Add a new task
+        addBtn.addEventListener('click', () => {
+            const taskText = taskInput.value.trim();
+            if (taskText === '') return;
+
+            createTaskElement(taskText, false);
+            saveTask(taskText, false);
+            taskInput.value = '';
+        });
+
+        // Handle Enter key to add a task
+        taskInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addBtn.click();
+            }
+        });
+
+        // Create a task element
+        function createTaskElement(taskText, completed) {
+            const taskItem = document.createElement('li');
+            taskItem.classList.add('task');
+            if (completed) taskItem.classList.add('completed');
+            taskItem.innerHTML = `
+                <span>${taskText}</span>
+                <button class="delete-btn">Delete</button>
+            `;
+
+            // Mark task as completed
+            taskItem.addEventListener('click', (e) => {
+                if (e.target.tagName !== 'BUTTON') {
+                    taskItem.classList.toggle('completed');
+                    updateTaskStatus(taskText, taskItem.classList.contains('completed'));
+                }
+            });
+
+            // Delete task
+            taskItem.querySelector('.delete-btn').addEventListener('click', () => {
+                taskList.removeChild(taskItem);
+                deleteTask(taskText);
+            });
+
+            taskList.appendChild(taskItem);
+        }
+    </script>
+</body>
+</html>
